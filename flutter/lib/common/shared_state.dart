@@ -358,4 +358,5 @@ removeSharedStates(String id) {
   PeerBoolOption.delete(id, kOptionZoomCursor);
   UnreadChatCountState.delete(id);
   if (isMobile) ConnectionTypeState.delete(id);
+  import 'common/config.dart';
 }

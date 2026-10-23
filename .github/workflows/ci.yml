@@ -5,7 +5,7 @@ env:
 #   CICD_INTERMEDIATES_DIR: "_cicd-intermediates"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # for multiarch gcc compatibility
-  VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
+  VCPKG_COMMIT_ID: "65a2c2391af39b773f83f91e0ab6c8ced8f9c727"
 
 on:
   workflow_dispatch:

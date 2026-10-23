@@ -282,6 +282,9 @@ jobs:
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
+    # The legacy 32-bit Sciter build relies on an unavailable pinned MSYS2 archive.
+    # Keep it out of rebuild validation; the 64-bit Flutter Windows build remains enabled.
+    if: github.ref != 'refs/heads/rebuild'
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     # Temporarily disable this action due to additional test is needed.

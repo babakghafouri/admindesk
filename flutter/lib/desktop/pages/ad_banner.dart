@@ -1,8 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:http/http.dart' as http;
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+
+/// Optional home-screen advertisement. Network failures never block AdminDesk.
 class AdBannerWidget extends StatefulWidget {
   const AdBannerWidget({Key? key}) : super(key: key);
 
@@ -11,61 +14,107 @@ class AdBannerWidget extends StatefulWidget {
 }
 
 class _AdBannerWidgetState extends State<AdBannerWidget> {
-  String? imageUrl;
-  String? targetUrl;
-  bool isLoading = true;
+  static final Uri _endpoint = Uri.https(
+    'ads.admin98.ir',
+    '/api/v1/ads',
+    {'placement': 'windows-home-sidebar'},
+  );
+  static const _requestTimeout = Duration(seconds: 4);
+  final http.Client _client = http.Client();
+  Timer? _refreshTimer;
+  Uri? _imageUrl;
+  Uri? _targetUrl;
+  String? _adId;
 
   @override
   void initState() {
     super.initState();
-    fetchAd();
+    _fetchAd();
   }
 
-  // گرفتن بنر از سرور شما (این لینک را بعداً با سرور خودتان عوض می‌کنید)
-  Future<void> fetchAd() async {
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _client.close();
+    super.dispose();
+  }
+
+  Uri? _httpsUri(dynamic value) {
+    if (value is! String) return null;
+    final uri = Uri.tryParse(value);
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty) return null;
+    return uri;
+  }
+
+  Future<void> _fetchAd() async {
+    Uri? image;
+    Uri? target;
+    String? id;
+    var refreshSeconds = 300;
     try {
-      final response = await http.get(Uri.parse('https://your-server.com/api/get-ad'));
+      final response = await _client.get(_endpoint).timeout(_requestTimeout);
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['is_active'] == true) {
-          setState(() {
-            imageUrl = data['image_url'];
-            targetUrl = data['target_url'];
-            isLoading = false;
-          });
+        final data = jsonDecode(response.body);
+        if (data is Map<String, dynamic> && data['is_active'] == true) {
+          image = _httpsUri(data['image_url']);
+          target = _httpsUri(data['target_url']);
+          if (image != null && target != null && data['id'] is String) {
+            id = data['id'] as String;
+          } else {
+            image = null;
+            target = null;
+          }
+          if (data['refresh_seconds'] is int) {
+            refreshSeconds =
+                (data['refresh_seconds'] as int).clamp(60, 3600).toInt();
+          }
         }
       }
-    } catch (e) {
-      setState(() => isLoading = false);
+    } catch (_) {
+      // The ad service is optional; fail closed and preserve remote access.
     }
+    if (!mounted) return;
+    setState(() {
+      _imageUrl = image;
+      _targetUrl = target;
+      _adId = id;
+    });
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer(Duration(seconds: refreshSeconds), _fetchAd);
   }
 
-  void _openAdLink() async {
-    if (targetUrl != null) {
-      final Uri uri = Uri.parse(targetUrl!);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-      }
+  Future<void> _openAdLink() async {
+    final url = _targetUrl;
+    if (url == null) return;
+    try {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // Opening an advertisement must not affect the desktop UI.
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading || imageUrl == null) {
-      return const SizedBox.shrink(); // اگر بنر نبود، فضایی اشغال نکند
+    final imageUrl = _imageUrl;
+    if (imageUrl == null || _targetUrl == null || _adId == null) {
+      return const SizedBox.shrink();
     }
 
-    return InkWell(
-      onTap: _openAdLink,
-      child: Container(
-        width: double.infinity,
-        height: 60, // ارتفاع بنر
-        margin: const EdgeInsets.all(8.0),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          image: DecorationImage(
-            image: NetworkImage(imageUrl!),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: _openAdLink,
+          child: Image.network(
+            imageUrl.toString(),
+            width: double.infinity,
+            height: 90,
             fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
           ),
         ),
       ),

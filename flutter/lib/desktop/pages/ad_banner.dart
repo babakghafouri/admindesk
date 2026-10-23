@@ -1,7 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:http/http.dart' as http;
+import 'dart:async';
 import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+
+const _adsApiUrl = 'https://admin98.ir/api/ads/';
 
 class AdBannerWidget extends StatefulWidget {
   const AdBannerWidget({Key? key}) : super(key: key);
@@ -11,61 +15,104 @@ class AdBannerWidget extends StatefulWidget {
 }
 
 class _AdBannerWidgetState extends State<AdBannerWidget> {
-  String? imageUrl;
-  String? targetUrl;
-  bool isLoading = true;
+  String? _imageUrl;
+  String? _targetUrl;
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    fetchAd();
+    _fetchAd();
   }
 
-  // گرفتن بنر از سرور شما (این لینک را بعداً با سرور خودتان عوض می‌کنید)
-  Future<void> fetchAd() async {
+  Future<void> _fetchAd() async {
     try {
-      final response = await http.get(Uri.parse('https://your-server.com/api/get-ad'));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['is_active'] == true) {
-          setState(() {
-            imageUrl = data['image_url'];
-            targetUrl = data['target_url'];
-            isLoading = false;
-          });
-        }
+      final response = await http
+          .get(Uri.parse(_adsApiUrl))
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) {
+        if (mounted) setState(() => _loading = false);
+        return;
       }
-    } catch (e) {
-      setState(() => isLoading = false);
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+
+      final ads = decoded['ads'];
+      if (ads is! List || ads.isEmpty || ads.first is! Map) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+
+      final ad = Map<String, dynamic>.from(ads.first as Map);
+      final image = ad['image_url'];
+      final target = ad['target_url'];
+      final imageUri = Uri.tryParse(image is String ? image : '');
+      final targetUri = Uri.tryParse(target is String ? target : '');
+      if (imageUri == null ||
+          targetUri == null ||
+          imageUri.scheme != 'https' ||
+          !['http', 'https'].contains(targetUri.scheme)) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+
+      if (mounted) {
+        setState(() {
+          _imageUrl = imageUri.toString();
+          _targetUrl = targetUri.toString();
+          _loading = false;
+        });
+      }
+    } on TimeoutException {
+      if (mounted) setState(() => _loading = false);
+    } catch (_) {
+      // Ads are optional: network/API failures must not affect remote desktop.
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _openAdLink() async {
-    if (targetUrl != null) {
-      final Uri uri = Uri.parse(targetUrl!);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-      }
+  Future<void> _openAdLink() async {
+    final url = _targetUrl;
+    if (url == null) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // Ignore link-launch failures; the client should remain usable.
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading || imageUrl == null) {
-      return const SizedBox.shrink(); // اگر بنر نبود، فضایی اشغال نکند
+    if (_loading || _imageUrl == null || _targetUrl == null) {
+      return const SizedBox.shrink();
     }
 
-    return InkWell(
-      onTap: _openAdLink,
-      child: Container(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: SizedBox(
+        height: 64,
         width: double.infinity,
-        height: 60, // ارتفاع بنر
-        margin: const EdgeInsets.all(8.0),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          image: DecorationImage(
-            image: NetworkImage(imageUrl!),
-            fit: BoxFit.cover,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: _openAdLink,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(
+                _imageUrl!,
+                fit: BoxFit.contain,
+                alignment: Alignment.center,
+                errorBuilder: (context, error, stackTrace) =>
+                    const SizedBox.shrink(),
+              ),
+            ),
           ),
         ),
       ),

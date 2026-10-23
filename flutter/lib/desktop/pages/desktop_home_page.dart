@@ -93,6 +93,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       buildTip(context),
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
+      // Windows home sidebar only: directly below the local password.
+      if (isWindows && !isOutgoingOnly) const AdBannerWidget(),
       FutureBuilder<Widget>(
         future: Future.value(
             Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
@@ -112,8 +114,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         },
       ),
       buildPluginEntry(),
-      // اضافه شدن بنر تبلیغاتی شما در انتهای پنل سمت چپ
-      const AdBannerWidget(),
     ];
     if (isIncomingOnly) {
       children.addAll([
